@@ -182,13 +182,11 @@ def print_all(path, process_obj, sim, run_flag):
     for x, y, step in path[start:]:
         process_obj.x0, process_obj.y0 = x, y
         beam_matrix = sim.run_simulation(y, x, process_obj.request_temp_recalc)
-        process_obj.set_beam_matrix(beam_matrix)
-        if process_obj.beam_matrix.max() <= 1:
+        if beam_matrix.max() <= 1:
             warnings.warn('No surface flux!', RuntimeWarning)
-            process_obj.beam_matrix[...] = 1
-        # process_obj.get_dt()
-        process_obj.update_helper_arrays()
-        # process_obj.get_dt()
+            process_obj.set_beam_matrix(1)
+        else:
+            process_obj.set_beam_matrix(beam_matrix)
         if process_obj.temperature_tracking:
             process_obj.heat_transfer(sim.beam_heating)
             process_obj.request_temp_recalc = False
@@ -226,24 +224,23 @@ def print_step(y, x, dwell_time, pr: Process, sim, t):
             flag_dt = False
         pr.deposition()  # depositing on a selected area
         if pr.check_cells_filled():
-            flag_resize = pr.update_surface()  # updating surface on a selected area
+            flag_resize = pr.cell_filled_routine()  # updating surface on a selected area
             if flag_resize:  # update references if the allocated simulation volume was increased
                 sim.update_structure(pr.structure)
             start = timeit.default_timer()
             beam_matrix = sim.run_simulation(y, x, pr.request_temp_recalc)  # run MC sim. and retrieve SE surface flux
-            pr.set_beam_matrix(beam_matrix)
-            pr.t_dissociation = 1 / (pr.precursor.sigma * beam_matrix.max())
             print(f'Finished MC in {timeit.default_timer() - start} s')
-            if pr.beam_matrix.max() <= 1:
+            if beam_matrix.max() <= 1:
                 warnings.warn('No surface flux!', RuntimeWarning)
                 pr.set_beam_matrix(1)
                 continue
-            pr.update_helper_arrays()  # auxiliary method that maintains an efficiency increasing infrastructure
+            else:
+                pr.set_beam_matrix(beam_matrix)
             if pr.temperature_tracking:
                 pr.heat_transfer(sim.beam_heating)
                 pr.request_temp_recalc = False
             if dwell_time >= pr.dt:
-                pr.dt
+                _ = pr.dt
             else:
                 pr.dt = dwell_time
         pr.precursor_density()  # recalculate precursor coverage
