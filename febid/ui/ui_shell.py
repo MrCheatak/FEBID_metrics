@@ -3,7 +3,7 @@ import os, sys
 import faulthandler
 import traceback
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QLineEdit
 from PyQt5 import QtWidgets
 
 from febid.ui.main_window import Ui_MainWindow as UI_MainPanel
@@ -446,28 +446,25 @@ class MainPanel(QMainWindow, UI_MainPanel):
         Check if the input line is numeric and not negative and save the parameter to the file
         :return:
         """
-        lineEdit = self.sender()
+        lineEdit: QLineEdit = self.sender()
         text = lineEdit.text()
-        if self.__is_float(text):
+        try:
             val = float(text)
-            if float(text) >= 0:
-                if self.save_flag:
-                    # Here the parameter is saved to the file
-                    # A naming convention is made: lineEdit objects are named the same
-                    # as the parameters in the file only with 'input_' in the beginning
-                    name = lineEdit.objectName()[6:]  # stripping 'input_'
-                    if int(val) > 0 and val / int(val) == 1:
-                        self.__save_parameter(name, int(val))
-                    else:
-                        self.__save_parameter(name, val)
-                return
-            else:
-                self.__view_message("Value cannot be negative.")
-                lineEdit.clear()
-        else:
+        except ValueError:
             self.__view_message('Input is invalid.', f'The value entered is not numerical.')
             lineEdit.clear()
-        a = 0
+            return
+        if val >= 0:
+            # Here the parameter is saved to the file
+            # A naming convention is made: lineEdit objects are named the same
+            # as the parameters in the file only with 'input_' in the beginning
+            name = lineEdit.objectName()[6:]  # stripping 'input_'
+            if self.__is_int(val) / val == 1:
+                val = int(val)
+            self.__save_parameter(name, val)
+        else:
+            self.__view_message("Value cannot be negative.")
+            lineEdit.clear()
 
     def open_new_session(self, file=''):
         """

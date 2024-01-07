@@ -170,6 +170,9 @@ class ContinuumModel(BaseParameterCollection):
         self._phi1 = np.nan
         self._phi2 = np.nan
 
+    def set_precursor_params(self, params: PrecursorParams):
+        self.precursor = params
+
     @property
     def dt(self):
         """
@@ -363,7 +366,7 @@ class ContinuumModel(BaseParameterCollection):
 # on this approach. Instead of the ghost cell array, it checks the same 'precursor' array, that it gets as a base argument,
 # for zero cells.
 # The ghost array is still kept and maintained throughout the simulation for conceptual clearness and visualisation
-class Process(ContinuumModel):
+class Process:
     """
     Class representing the core deposition process.
     It contains all necessary arrays, variables, parameters and methods to construct a continuous deposition process.
@@ -378,12 +381,18 @@ class Process(ContinuumModel):
     def __init__(self, structure: Structure, equation_values, deposition_scaling=1, temp_tracking=True,
                  name=None):
         super().__init__()
+        self.beam = None
+        self.precursor = None
         if not name:
             self.name = str(np.random.randint(000000, 999999, 1)[0])
         else:
             self.name = name
         # Declaring necessary properties
-        self.structure = None
+        self.beam: BeamSettings = None
+        self.precursor: PrecursorParams = None
+        self.model: ContinuumModel = None
+        self.set_model(ContinuumModel())
+        self.structure: Structure = structure
         self.cell_size = None
         self.cell_V = None
         self.heat_cond = 0
@@ -475,7 +484,7 @@ class Process(ContinuumModel):
         self.__generate_surface_index()
         self._get_solid_index()
         self.temp_step_cells = self.temp_step / self.cell_V
-        self.structure.precursor[self.structure.surface_bool] = self.nr
+        self.structure.precursor[self.structure.surface_bool] = self.model.nr
         if self.temperature_tracking:
             self.__get_surface_temp()
             self.residence_time()
@@ -491,7 +500,6 @@ class Process(ContinuumModel):
         self.D_temp = np.zeros_like(self.structure.precursor)
         self.tau_temp = np.zeros_like(self.structure.precursor)
         self.cell_size = self.structure.cell_size
-        self.step = self.cell_size
         self.cell_V = self.cell_size ** 3
         self.__set_max_z()
         self.substrate_height = structure.substrate_height
@@ -516,6 +524,11 @@ class Process(ContinuumModel):
                 warnings.warn('Some of the temperature dependent parameters were not found! \n '
                               'Switch to static temperature mode? y/n')
                 self.temperature_tracking = False
+
+    def set_model(self, model: ContinuumModel):
+        self.model = model
+        self.precursor = model.precursor
+        self.beam = model.beam
 
     def view_dt(self, units='µs'):
         m = 1E6
@@ -1036,7 +1049,7 @@ class Process(ContinuumModel):
         if type(D) is np.ndarray:
             D = D.max()
         if D > 0:
-            return self.step ** 2 / (6 * D)
+            return diffusion.get_diffusion_stability_time(D, self.cell_size)
         else:
             return 1
 
@@ -1048,8 +1061,22 @@ class Process(ContinuumModel):
         tau = self.get_tau()
         if type(tau) is np.ndarray:
             tau = tau.max()
-        self._dt_des = tau
         return tau
+
+    @property
+    def dt_diss(self):
+        """
+        Return dissociation time step
+        """
+        return self.model.dt_dis()
+
+    @property
+    def dt(self):
+        """
+        Returns a time step
+        """
+        dt = min(self.dt_diff, self.dt_des, self.dt_diss) * 0.9
+        return dt
 
     @property
     def irradiated_area_2D(self):
